@@ -11,6 +11,9 @@ RUN apt-get update && \
     apt-get install -y curl unzip && \
     rm -rf /var/lib/apt/lists/*
 
+# 安装 uv（脚本处理 pyproject.toml 依赖时需要）
+RUN pip install --no-cache-dir uv
+
 # 设置工作目录
 WORKDIR /app
 
