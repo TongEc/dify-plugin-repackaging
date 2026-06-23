@@ -415,9 +415,37 @@ print_usage() {
 	exit 1
 }
 
+# pip's `--platform` flag matches wheel tags EXACTLY and does NOT accept lower
+# manylinux floors (e.g. a target of manylinux_2_28 rejects a manylinux_2_17 wheel).
+# uv resolves each dependency to its newest version, and different packages publish
+# wheels at different glibc floors (cffi 2.0.0 -> 2_17, gevent 26.5.0 -> 2_28), so a
+# single --platform value can never match them all. Expand the -p target into
+# multiple --platform flags covering every common glibc floor (most-portable first);
+# only the architecture is taken from the -p value.
+build_pip_platform_args() {
+	local target="$1"
+	local arch=""
+	case "$target" in
+		*aarch64*) arch="aarch64" ;;
+		*x86_64*)  arch="x86_64" ;;
+		*) echo "--platform ${target} --only-binary=:all:"; return ;;
+	esac
+	local args="--only-binary=:all:"
+	local p
+	# legacy aliases + glibc floors 2.5 .. 2.34, ascending (pip prefers earlier tags)
+	for p in manylinux1 manylinux_2_5 \
+	         manylinux2010 manylinux_2_12 \
+	         manylinux2014 manylinux_2_17 \
+	         manylinux_2_24 manylinux_2_26 manylinux_2_27 manylinux_2_28 \
+	         manylinux_2_31 manylinux_2_34; do
+		args="${args} --platform ${p}_${arch}"
+	done
+	echo "$args"
+}
+
 while getopts "p:s:R" opt; do
 	case "$opt" in
-		p) RAW_PLATFORM="${OPTARG}"; PIP_PLATFORM="--platform ${OPTARG} --only-binary=:all:" ;;
+		p) RAW_PLATFORM="${OPTARG}"; PIP_PLATFORM="$(build_pip_platform_args "${OPTARG}")" ;;
 		s) PACKAGE_SUFFIX="${OPTARG}" ;;
 		R) PRERELEASE_ALLOW=1 ;;
 		*) print_usage; exit 1 ;;
